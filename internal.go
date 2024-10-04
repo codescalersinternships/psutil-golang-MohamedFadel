@@ -15,4 +15,3 @@ func openAndReadFile(path string) ([]string, error) {
 	lines := strings.Split(string(data), "\n")
 	return lines, nil
 }
-
