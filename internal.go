@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func openAndReadFile(path string) ([]string, error) {
+var openAndReadFile = func(path string) ([]string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrReadingFile, err)
