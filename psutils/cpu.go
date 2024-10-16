@@ -1,4 +1,4 @@
-package psutilgolangmohamedfadel
+package psutils
 
 import (
 	"fmt"
