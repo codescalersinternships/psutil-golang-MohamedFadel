@@ -158,3 +158,49 @@ func TestGetCPUInfo(t *testing.T) {
 		}
 	})
 }
+
+func TestGetProcessInfo(t *testing.T) {
+	if _, err := os.Stat("/proc"); os.IsNotExist(err) {
+		t.Skip("Skipping test as /proc doesn't exist on this system")
+	}
+
+	t.Run("BasicFunctionality", func(t *testing.T) {
+		procInfo, err := GetProcessInfo()
+		if err != nil {
+			t.Fatalf("GetProcessInfo() returned an error: %v", err)
+		}
+
+		if procInfo == nil {
+			t.Fatal("GetProcessInfo() returned nil")
+		}
+
+		if len(*procInfo) == 0 {
+			t.Fatal("GetProcessInfo() returned an empty slice")
+		}
+
+		found := make(map[string]bool)
+		for _, info := range *procInfo {
+			if info.Name == "systemd" {
+				found["systemd"] = true
+			}
+
+		}
+
+		if !found["systemd"] {
+			t.Error("Did not find systemd process")
+		}
+
+		for _, info := range *procInfo {
+			if info.PID <= 0 {
+				t.Errorf("Invalid PID: %d", info.PID)
+			}
+			if info.Name == "" {
+				t.Errorf("Empty process name for PID: %d", info.PID)
+			}
+			if info.State == "" {
+				t.Errorf("Empty process state for PID: %d", info.PID)
+			}
+		}
+	})
+
+}
