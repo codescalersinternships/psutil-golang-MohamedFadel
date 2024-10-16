@@ -6,12 +6,18 @@ import (
 	"strconv"
 )
 
+// ProcessInfo contains basic information about a process.
 type ProcessInfo struct {
-	PID   int
-	Name  string
-	State string
+	PID   int    // Process ID
+	Name  string // Name of the process
+	State string // Current state of the process
 }
 
+/*
+GetProcessInfo retrieves and returns information about all running processes.
+It reads from the /proc filesystem to gather this information.
+Returns a pointer to a slice of ProcessInfo and an error if any occurred during the process.
+*/
 func GetProcessInfo() (*[]ProcessInfo, error) {
 	var procInfoList []ProcessInfo
 	var procInfo ProcessInfo

@@ -1,20 +1,25 @@
 package psutils
 
-
 import (
 	"strconv"
 	"strings"
 )
 
+// MemoryInfo contains various statistics about system memory usage.
 type MemoryInfo struct {
-	TotalMemory     int
-	UsedMemory      int
-	AvailableMemory int
-	FreeMemory      int
-	Buffers         int
-	Cached          int
+	TotalMemory     int // Total amount of physical RAM, in KB
+	UsedMemory      int // Total used memory, in KB
+	AvailableMemory int // Available memory, in KB
+	FreeMemory      int // Free memory, in KB
+	Buffers         int // Memory used by kernel buffers, in KB
+	Cached          int // Memory used by the page cache and slabs, in KB
 }
 
+/*
+GetMemoryInfo retrieves and returns information about the system's memory usage.
+It reads from /proc/meminfo to gather this information.
+Returns a pointer to MemoryInfo and an error if any occurred during the process.
+*/
 func GetMemoryInfo() (*MemoryInfo, error) {
 	data, err := openAndReadFile("/proc/meminfo")
 	if err != nil {

@@ -7,19 +7,27 @@ import (
 	"strings"
 )
 
+// CPUCoreFreq represents the frequency information for a CPU core.
 type CPUCoreFreq struct {
-	Core    string
-	MinFreq int
-	MaxFreq int
-}
-type CPUInfo struct {
-	NumOfCores int
-	ModelName  string
-	CacheSize  int
-	CPUMHz     float64
-	Frequency  []CPUCoreFreq
+	Core    string // The name of the CPU core
+	MinFreq int    // The minimum frequency of the core in Hz
+	MaxFreq int    // The maximum frequency of the core in Hz
 }
 
+// CPUInfo contains various information about the CPU.
+type CPUInfo struct {
+	NumOfCores int           // The number of CPU cores
+	ModelName  string        // The model name of the CPU
+	CacheSize  int           // The total cache size in KB
+	CPUMHz     float64       // The average CPU frequency in MHz
+	Frequency  []CPUCoreFreq // Frequency information for each core
+}
+
+/*
+GetCPUInfo retrieves and returns information about the CPU.
+It reads various system files to gather this information.
+Returns a pointer to CPUInfo and an error if any occurred during the process.
+*/
 func GetCPUInfo() (*CPUInfo, error) {
 	var cpuInfo CPUInfo
 
