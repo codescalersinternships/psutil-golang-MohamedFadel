@@ -2,6 +2,7 @@ package psutils
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"strconv"
 	"strings"
@@ -21,6 +22,16 @@ type CPUInfo struct {
 	CacheSize  int           // The total cache size in KB
 	CPUMHz     float64       // The average CPU frequency in MHz
 	Frequency  []CPUCoreFreq // Frequency information for each core
+}
+
+var (
+	readFile func(name string) ([]byte, error)
+	readDir  func(name string) ([]fs.DirEntry, error)
+)
+
+func init() {
+	readFile = os.ReadFile
+	readDir = os.ReadDir
 }
 
 /*
@@ -54,7 +65,7 @@ func GetCPUInfo() (*CPUInfo, error) {
 	}
 	cpuInfo.CPUMHz = totalMHz / float64(cpuInfo.NumOfCores)
 
-	d, err := os.ReadFile("/sys/devices/system/cpu/cpu0/cache/index0/size")
+	d, err := readFile("/sys/devices/system/cpu/cpu0/cache/index0/size")
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +77,7 @@ func GetCPUInfo() (*CPUInfo, error) {
 		return nil, err
 	}
 
-	d2, err := os.ReadFile("/sys/devices/system/cpu/cpu0/cache/index1/size")
+	d2, err := readFile("/sys/devices/system/cpu/cpu0/cache/index1/size")
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +89,7 @@ func GetCPUInfo() (*CPUInfo, error) {
 		return nil, err
 	}
 
-	d3, err := os.ReadFile("/sys/devices/system/cpu/cpu0/cache/index2/size")
+	d3, err := readFile("/sys/devices/system/cpu/cpu0/cache/index2/size")
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +101,7 @@ func GetCPUInfo() (*CPUInfo, error) {
 		return nil, err
 	}
 
-	d4, err := os.ReadFile("/sys/devices/system/cpu/cpu0/cache/index3/size")
+	d4, err := readFile("/sys/devices/system/cpu/cpu0/cache/index3/size")
 	if err != nil {
 		return nil, err
 	}
@@ -104,34 +115,27 @@ func GetCPUInfo() (*CPUInfo, error) {
 
 	cpuInfo.CacheSize = cpuInfo.NumOfCores*(l1iCache+l1dCache+l2Cache) + l3Cache
 
-	var coreNames []string
-	for i := range cpuInfo.NumOfCores {
-		coreName := []string{"cpu", strconv.Itoa(i)}
-		coreNames = append(coreNames, strings.Join(coreName, ""))
-	}
-
-	for i := range cpuInfo.NumOfCores {
+	for i := 0; i < cpuInfo.NumOfCores; i++ {
 		var cpuCoreFreq CPUCoreFreq
-		cpuCoreFreq.Core = coreNames[i]
+		cpuCoreFreq.Core = fmt.Sprintf("cpu%d", i)
 
-		dataMin, err := os.ReadFile(fmt.Sprintf("/sys/devices/system/cpu/%s/cpufreq/cpuinfo_min_freq", coreNames[i]))
+		dataMin, err := readFile(fmt.Sprintf("/sys/devices/system/cpu/cpu%d/cpufreq/cpuinfo_min_freq", i))
 		if err != nil {
 			return nil, err
 		}
-		if minFreq, err := strconv.Atoi(strings.Split(string(dataMin), "\n")[0]); err == nil {
+		if minFreq, err := strconv.Atoi(strings.TrimSpace(string(dataMin))); err == nil {
 			cpuCoreFreq.MinFreq = minFreq
 		}
 
-		dataMax, err := os.ReadFile(fmt.Sprintf("/sys/devices/system/cpu/%s/cpufreq/cpuinfo_max_freq", coreNames[i]))
+		dataMax, err := readFile(fmt.Sprintf("/sys/devices/system/cpu/cpu%d/cpufreq/cpuinfo_max_freq", i))
 		if err != nil {
 			return nil, err
 		}
-		if maxFreq, err := strconv.Atoi(strings.Split(string(dataMax), "\n")[0]); err == nil {
+		if maxFreq, err := strconv.Atoi(strings.TrimSpace(string(dataMax))); err == nil {
 			cpuCoreFreq.MaxFreq = maxFreq
 		}
 
 		cpuInfo.Frequency = append(cpuInfo.Frequency, cpuCoreFreq)
-
 	}
 
 	return &cpuInfo, nil

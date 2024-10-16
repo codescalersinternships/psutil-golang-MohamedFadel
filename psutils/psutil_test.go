@@ -1,9 +1,9 @@
 package psutils
 
 import (
-	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -73,23 +73,93 @@ func TestGetMemoryInfo(t *testing.T) {
 	})
 }
 
-var (
-	readFile func(name string) ([]byte, error)
-	readDir  func(name string) ([]fs.DirEntry, error)
-)
+var testDir string
 
 func init() {
 	readFile = os.ReadFile
 	readDir = os.ReadDir
 }
 
+func setupTestFiles() error {
+	testDir = "./mock_sys/devices/system/cpu/"
+
+	err := os.MkdirAll(testDir+"cpu0/cpufreq", os.ModePerm)
+	if err != nil {
+		return err
+	}
+	err = os.MkdirAll(testDir+"cpu1/cpufreq", os.ModePerm)
+	if err != nil {
+		return err
+	}
+	err = os.MkdirAll(testDir+"cpu0/cache/index0", os.ModePerm)
+	if err != nil {
+		return err
+	}
+	err = os.MkdirAll(testDir+"cpu0/cache/index1", os.ModePerm)
+	if err != nil {
+		return err
+	}
+	err = os.MkdirAll(testDir+"cpu0/cache/index2", os.ModePerm)
+	if err != nil {
+		return err
+	}
+	err = os.MkdirAll(testDir+"cpu0/cache/index3", os.ModePerm)
+	if err != nil {
+		return err
+	}
+
+	files := map[string]string{
+		filepath.Join(testDir, "cpu0/cpufreq/cpuinfo_min_freq"): "400000\n",
+		filepath.Join(testDir, "cpu0/cpufreq/cpuinfo_max_freq"): "3400000\n",
+		filepath.Join(testDir, "cpu1/cpufreq/cpuinfo_min_freq"): "400000\n",
+		filepath.Join(testDir, "cpu1/cpufreq/cpuinfo_max_freq"): "3400000\n",
+		filepath.Join(testDir, "cpu0/cache/index0/size"):        "32K\n",
+		filepath.Join(testDir, "cpu0/cache/index1/size"):        "32K\n",
+		filepath.Join(testDir, "cpu0/cache/index2/size"):        "256K\n",
+		filepath.Join(testDir, "cpu0/cache/index3/size"):        "6144K\n",
+	}
+
+	for path, content := range files {
+		err := os.WriteFile(path, []byte(content), 0644)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func cleanupTestFiles() {
+	os.RemoveAll("./mock_sys/")
+}
+
 func TestGetCPUInfo(t *testing.T) {
+	err := setupTestFiles()
+	if err != nil {
+		t.Fatalf("Failed to set up test files: %v", err)
+	}
+	defer cleanupTestFiles()
+
 	originalOpenAndReadFile := openAndReadFile
 	originalReadFile := readFile
+	originalReadDir := readDir
 	defer func() {
 		openAndReadFile = originalOpenAndReadFile
 		readFile = originalReadFile
+		readDir = originalReadDir
 	}()
+
+	readFile = func(name string) ([]byte, error) {
+		mockedPath := strings.Replace(name, "/sys/devices/system/cpu/", testDir, 1)
+		return os.ReadFile(mockedPath)
+	}
+
+	readDir = func(name string) ([]fs.DirEntry, error) {
+		return []fs.DirEntry{
+			&testDirEntry{name: "cpu0", isDir: true},
+			&testDirEntry{name: "cpu1", isDir: true},
+		}, nil
+	}
 
 	t.Run("Successful CPU info retrieval", func(t *testing.T) {
 		openAndReadFile = func(path string) ([]string, error) {
@@ -97,66 +167,40 @@ func TestGetCPUInfo(t *testing.T) {
 				t.Fatalf("Unexpected file path: %s", path)
 			}
 			return []string{
-				"processor	: 0",
-				"model name	: Intel(R) Core(TM) i5-8250U CPU @ 1.60GHz",
-				"cpu MHz		: 3400.000",
-				"processor	: 1",
-				"model name	: Intel(R) Core(TM) i5-8250U CPU @ 1.60GHz",
-				"cpu MHz		: 3400.000",
+				"processor : 0",
+				"model name : Intel(R) Core(TM) i5-8250U CPU @ 1.60GHz",
+				"cpu MHz : 3400.000",
+				"processor : 1",
+				"model name : Intel(R) Core(TM) i5-8250U CPU @ 1.60GHz",
+				"cpu MHz : 3400.000",
 			}, nil
 		}
 
-		readFile = func(name string) ([]byte, error) {
-			switch {
-			case strings.Contains(name, "cache/index"):
-				return []byte("32K\n"), nil
-			case strings.Contains(name, "cpufreq/cpuinfo_min_freq"),
-				strings.Contains(name, "cpufreq/cpuinfo_max_freq"):
-				return nil, os.ErrNotExist
-			default:
-				return nil, fmt.Errorf("unexpected file: %s", name)
-			}
+		expected := &CPUInfo{
+			NumOfCores: 2,
+			ModelName:  "Intel(R) Core(TM) i5-8250U CPU @ 1.60GHz",
+			CacheSize:  6784,
+			CPUMHz:     3400.0,
+			Frequency: []CPUCoreFreq{
+				{Core: "cpu0", MinFreq: 400000, MaxFreq: 3400000},
+				{Core: "cpu1", MinFreq: 400000, MaxFreq: 3400000},
+			},
 		}
 
 		result, err := GetCPUInfo()
 		if err != nil {
 			t.Fatalf("Unexpected error: %v", err)
 		}
-
-		if result.NumOfCores != 2 {
-			t.Errorf("Expected NumOfCores to be 2, got %d", result.NumOfCores)
-		}
-		if result.ModelName != "Intel(R) Core(TM) i5-8250U CPU @ 1.60GHz" {
-			t.Errorf("Unexpected ModelName: %s", result.ModelName)
-		}
-		if result.CPUMHz != 3400.0 {
-			t.Errorf("Expected CPUMHz to be 3400.0, got %f", result.CPUMHz)
-		}
-
-		if result.CacheSize != 0 && result.CacheSize != 6784 {
-			t.Errorf("Unexpected CacheSize: %d", result.CacheSize)
-		}
-
-		if len(result.Frequency) > 0 {
-			if len(result.Frequency) != 2 {
-				t.Errorf("Expected 2 Frequency entries, got %d", len(result.Frequency))
-			}
-			for i, freq := range result.Frequency {
-				if freq.Core != fmt.Sprintf("cpu%d", i) {
-					t.Errorf("Unexpected Core name: %s", freq.Core)
-				}
-				if freq.MinFreq != 400000 && freq.MinFreq != 0 {
-					t.Errorf("Unexpected MinFreq: %d", freq.MinFreq)
-				}
-				if freq.MaxFreq != 3400000 && freq.MaxFreq != 0 {
-					t.Errorf("Unexpected MaxFreq: %d", freq.MaxFreq)
-				}
-			}
+		if !reflect.DeepEqual(result, expected) {
+			t.Errorf("GetCPUInfo() = %+v, want %+v", result, expected)
 		}
 	})
 
 	t.Run("File read error", func(t *testing.T) {
 		openAndReadFile = func(path string) ([]string, error) {
+			return nil, os.ErrNotExist
+		}
+		readFile = func(name string) ([]byte, error) {
 			return nil, os.ErrNotExist
 		}
 
@@ -166,6 +210,16 @@ func TestGetCPUInfo(t *testing.T) {
 		}
 	})
 }
+
+type testDirEntry struct {
+	name  string
+	isDir bool
+}
+
+func (e *testDirEntry) Name() string               { return e.name }
+func (e *testDirEntry) IsDir() bool                { return e.isDir }
+func (e *testDirEntry) Type() fs.FileMode          { return fs.ModeDir }
+func (e *testDirEntry) Info() (fs.FileInfo, error) { return nil, nil }
 
 func TestGetProcessInfo(t *testing.T) {
 	if _, err := os.Stat("/proc"); os.IsNotExist(err) {
