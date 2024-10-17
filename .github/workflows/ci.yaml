@@ -1,0 +1,55 @@
+name: CI Pipeline
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+      - development
+
+jobs:
+  golangci:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.60.0
+      - name: Run golangci-lint
+        run: golangci-lint run ./...
+
+  fmt:
+    name: Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Run go fmt
+        run: gofmt -l .
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: Install Dependencies
+        run: go mod tidy
+      - name: Run Tests
+        run: go test ./... -v -coverprofile=coverage.out
+      - name: Upload Test Coverage
+        if: success()
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage
+          path: coverage.out
+          
